@@ -4,6 +4,23 @@ import pandas as pd
 import datetime
 # --- SYSTÈME DE LICENCE ---
 import hashlib
+if st.session_state.auth:
+    # 1. Établir la connexion à la base locale AVANT tout le reste
+    conn = sqlite3.connect('boutique.db', check_same_thread=False)
+    
+    # 2. Maintenant vous pouvez charger les données pour le Tableau de Bord
+    try:
+        low_stock_query = pd.read_sql_query(
+            "SELECT nom, quantite FROM produits WHERE quantite <= seuil_alerte", 
+            conn
+        )
+    except Exception as e:
+        low_stock_query = pd.DataFrame(columns=['nom', 'quantite'])
+        # Optionnel : st.warning("La table des produits n'est pas encore prête.")
+
+    # 3. Affichage du Menu Principal
+    # ... le reste de votre code (sidebar, menu, etc.)
+
 from supabase import create_client
 
 # Remplacez par vos vraies infos copiées à l'étape 2
@@ -39,6 +56,7 @@ def activate_software(nom_saisi, cle_saisie):
     try:
         # On interroge Supabase pour voir si le couple Nom/Clé existe
         res = supabase.table("licences").select("*").eq("nom", nom_saisi).eq("cle", cle_saisie).execute()
+        st.write("Données reçues :", res.data) # À supprimer après le test
         
         if len(res.data) > 0:
             # Si trouvé, on enregistre l'activation LOCALEMENT dans boutique.db
@@ -141,28 +159,34 @@ if not licence_info or licence_info[0] != "Active":
 if "auth" not in st.session_state:
     st.session_state.auth, st.session_state.role, st.session_state.user = False, None, None
 
-# --- 2. CONNEXION (Modifié) ---
-# --- 2. CONNEXION (Version Sécurisée avec Supabase) ---
+# --- 2. CONNEXION (Version Cloud avec Supabase) ---
 if not st.session_state.auth:
     st.title("🔐 Bienvenue")
     with st.form("login"):
-        u = st.text_input("Identifiant").lower()
-        p = st.text_input("Mot de passe", type="password")
+        u = st.text_input("Identifiant").lower().strip()
+        p = st.text_input("Mot de passe", type="password").strip()
+        
         if st.form_submit_button("Se connecter"):
-            # On vérifie maintenant dans une table 'utilisateurs' sur Supabase
             try:
+                # REQUÊTE TEST
                 res = supabase.table("utilisateurs").select("*").eq("identifiant", u).eq("mot_de_passe", p).execute()
+                
+                # DEBUG : On affiche ce que Supabase répond réellement
+                if not res.data:
+                    st.warning(f"Le serveur ne trouve rien pour l'utilisateur : {u}")
+                else:
+                    st.write("Utilisateur trouvé :", res.data) # Pour voir si le mot de passe correspond
+                
                 if res.data and len(res.data) > 0:
                     user_data = res.data[0]
                     st.session_state.auth = True
                     st.session_state.role = user_data['role']
                     st.session_state.user = u
-                    st.success("Connexion réussie !")
                     st.rerun()
                 else:
                     st.error("Identifiants incorrects sur le serveur.")
             except Exception as e:
-                st.error(f"Erreur de connexion : {e}")
+                st.error(f"Erreur technique de connexion : {e}")
     st.stop()
 
 # --- SIDEBAR & MENU ---
@@ -449,13 +473,25 @@ elif menu == "👥 Employés en Ligne" and st.session_state.role == "Patron":
 elif menu == "⚙️ Paramètres":
     st.header("⚙️ Paramètres")
     t_compte, t_equipe = st.tabs(["👤 Mon Compte", "👥 Gestion Équipe"])
+    
     with t_compte:
+        # Ces lignes DOIVENT être décalées vers la droite
         un = st.text_input("Nouveau Nom", value=st.session_state.user)
         up = st.text_input("Nouveau Mot de passe", type="password")
+        
         if st.button("Sauvegarder"):
-            c = conn.cursor()
-            c.execute("UPDATE utilisateurs SET identifiant=?, mot_de_passe=? WHERE identifiant=?", (un, up, st.session_state.user))
-            conn.commit(); st.session_state.user = un; st.success("Mis à jour !"); st.rerun()
+            try:
+                # MISE À JOUR SUR SUPABASE
+                supabase.table("utilisateurs").update({
+                    "identifiant": un.lower(), 
+                    "mot_de_passe": up
+                }).eq("identifiant", st.session_state.user).execute()
+                
+                st.session_state.user = un.lower()
+                st.success("✅ Mis à jour sur le serveur avec succès !")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Erreur de mise à jour : {e}")
     with t_equipe:
         st.subheader("Ajouter un nouvel employé")
         with st.form("creer_employe", clear_on_submit=True):
@@ -527,16 +563,4 @@ elif menu == "☎️ Aide & Support":
         if st.form_submit_button("Envoyer la demande"):
             # Ici, comme c'est local, on simule l'envoi
             st.success("Votre demande a été enregistrée. Pacy MHA vous contactera sous peu.")
-
-   
-
-
-
-
-
-
-
-
-
-
 
