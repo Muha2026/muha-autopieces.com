@@ -142,29 +142,28 @@ if "auth" not in st.session_state:
     st.session_state.auth, st.session_state.role, st.session_state.user = False, None, None
 
 # --- 2. CONNEXION (Modifié) ---
+# --- 2. CONNEXION (Version Sécurisée avec Supabase) ---
 if not st.session_state.auth:
     st.title("🔐 Bienvenue")
     with st.form("login"):
-        u = st.text_input("Identifiant").lower() # Ajout de .lower() ici
+        u = st.text_input("Identifiant").lower()
         p = st.text_input("Mot de passe", type="password")
         if st.form_submit_button("Se connecter"):
-            conn = sqlite3.connect('boutique.db')
-            c = conn.cursor()
-            # On cherche l'utilisateur
-            c.execute("SELECT role FROM utilisateurs WHERE identifiant=? AND mot_de_passe=?", (u, p))
-            res = c.fetchone()
-            if res:
-                st.session_state.auth, st.session_state.role, st.session_state.user = True, res[0], u
-                # On enregistre la présence (comme suggéré avant)
-                c.execute("INSERT INTO presence (utilisateur, date_connexion) VALUES (?, CURRENT_TIMESTAMP)", (u,))
-                conn.commit()
-                st.rerun()
-            else: 
-                st.error("Identifiants incorrects")
-            conn.close()
+            # On vérifie maintenant dans une table 'utilisateurs' sur Supabase
+            try:
+                res = supabase.table("utilisateurs").select("*").eq("identifiant", u).eq("mot_de_passe", p).execute()
+                if res.data and len(res.data) > 0:
+                    user_data = res.data[0]
+                    st.session_state.auth = True
+                    st.session_state.role = user_data['role']
+                    st.session_state.user = u
+                    st.success("Connexion réussie !")
+                    st.rerun()
+                else:
+                    st.error("Identifiants incorrects sur le serveur.")
+            except Exception as e:
+                st.error(f"Erreur de connexion : {e}")
     st.stop()
-
-conn = sqlite3.connect('boutique.db')
 
 # --- SIDEBAR & MENU ---
 st.sidebar.title(f"👤 {st.session_state.user}")
@@ -530,6 +529,7 @@ elif menu == "☎️ Aide & Support":
             st.success("Votre demande a été enregistrée. Pacy MHA vous contactera sous peu.")
 
    
+
 
 
 
