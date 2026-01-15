@@ -4,6 +4,15 @@ import pandas as pd
 import datetime
 # --- SYSTÈME DE LICENCE ---
 import hashlib
+# --- INITIALISATION DES VARIABLES (À mettre au tout début) ---
+if 'auth' not in st.session_state:
+    st.session_state.auth = False
+if 'user' not in st.session_state:
+    st.session_state.user = None
+if 'role' not in st.session_state:
+    st.session_state.role = None
+
+# Maintenant, votre ligne 7 ne causera plus d'erreur :..
 if st.session_state.auth:
     # 1. Établir la connexion à la base locale AVANT tout le reste
     conn = sqlite3.connect('boutique.db', check_same_thread=False)
@@ -563,4 +572,7 @@ elif menu == "☎️ Aide & Support":
         if st.form_submit_button("Envoyer la demande"):
             # Ici, comme c'est local, on simule l'envoi
             st.success("Votre demande a été enregistrée. Pacy MHA vous contactera sous peu.")
+
+
+
 
